@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Workflow"
+  short_description: "Safely commit, push, and merge Git changes"
+  default_prompt: "Use $git-workflow to run gitc or gitship safely."

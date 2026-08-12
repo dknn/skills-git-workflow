@@ -1,0 +1,10 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Temporary and local scan output
+*.tmp
+gitleaks-report.*
+.test-*/
