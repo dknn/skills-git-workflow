@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Safely stage and commit Git changes or ship a branch through a GitHub pull request or GitLab merge request. Use when the user says gitc, asks for a local AI-generated commit, says gitship, or asks to push a branch and merge it remotely. Require a root .gitignore, repository-instruction compliance, staged-content Gitleaks scanning, focused diffs, and protected-branch safeguards.
+description: Safely stage and commit Git changes or ship a branch through a GitHub pull request or GitLab merge request. Use when the user says gitc, asks for a local AI-generated commit, says gitship, or asks to push a branch and merge it remotely. Require a root .gitignore, repository-instruction compliance, staged-content Gitleaks scanning, focused diffs, .NET dependency auditing before shipping, and protected-branch safeguards.
 ---
 
 # Git workflow
@@ -110,9 +110,92 @@ After the common checks and successful staged-content scan:
 
 ## `gitship`
 
-Complete `gitc` first when approved changes are not already committed. If the
-working tree has no approved changes, ship the existing current-branch commits
-after performing all applicable safety checks.
+When approved changes are not already committed, perform the common checks and
+stage-and-scan steps, then run the .NET dependency precheck below before
+creating the `gitc` commit. Complete the commit only after the dependency
+findings are resolved. If the working tree has no approved changes, run all
+applicable safety checks before shipping the existing current-branch commits.
+
+### .NET dependency precheck
+
+1. Detect supported .NET project and solution entry points, including `.sln`,
+   `.slnx`, `.csproj`, `.fsproj`, and `.vbproj`, while excluding generated and
+   vendor directories. Follow repository instructions when they designate the
+   authoritative solution or project. Ensure every detected project is covered;
+   stop and report an incomplete audit when coverage cannot be established.
+2. If no supported .NET entry point exists, report the precheck as not
+   applicable and continue. Otherwise require the `dotnet` CLI. Do not install
+   an SDK, change `global.json`, or bypass a repository-pinned SDK. Stop when
+   the required SDK is unavailable.
+3. Record the working-tree status before commands that may restore packages.
+   Never stage restore-generated changes automatically. After the precheck,
+   identify any new or modified files and require them to be reviewed as normal
+   task changes or reverted by the user; do not discard them automatically.
+4. Restore each selected entry point with NuGet auditing explicitly enabled and
+   transitive auditing forced on, equivalent to:
+   `dotnet restore <entry-point> -p:NuGetAudit=true -p:NuGetAuditMode=all`.
+   Respect repository package sources, `NuGet.Config`, lock files, and source
+   mappings. Do not add or replace an audit source. Treat an unavailable audit
+   source, restore failure, timeout, or partial result as an incomplete security
+   check and stop.
+5. Produce separate machine-readable dependency reports for known
+   vulnerabilities and deprecated packages. Use the SDK-compatible command
+   form:
+   - .NET 10 or newer: `dotnet package list --project <entry-point>`.
+   - .NET 9 or older: `dotnet list <entry-point> package`.
+   Add `--include-transitive --vulnerable --format json` for the vulnerability
+   report and `--include-transitive --deprecated --format json` for the
+   deprecation report. Run the reports separately because `--vulnerable` and
+   `--deprecated` cannot be combined. Use temporary output outside the
+   repository and remove only the verified temporary files afterward.
+6. Parse the JSON reports rather than treating a zero exit status as proof that
+   no packages were reported. For every finding, report the package ID,
+   resolved version, affected project and target framework, whether it is direct
+   or transitive, vulnerability severity and advisory URL when applicable, and
+   available replacement or deprecation reason when supplied. Do not suppress
+   findings because the affected code path appears unused.
+7. For a transitive vulnerability, use `dotnet nuget why` when supported to
+   identify the top-level dependency path. If that command is unavailable,
+   retain the finding and explain that the dependency path could not be
+   resolved; do not treat the audit as clean.
+8. If vulnerabilities are found, stop and require one explicit user choice:
+   - update or replace the affected package(s), then rerun restore,
+     repository-required tests, both dependency reports, and the normal
+     `gitship` checks;
+   - ignore the listed advisory or advisories for this `gitship` run only and
+     continue; or
+   - stop without committing or changing remote state.
+   Never update packages automatically. Never persist an ignore by modifying
+   project files, `Directory.Build.props`, `NuGet.Config`, warning settings, or
+   `NuGetAuditSuppress` unless the user separately requests that repository
+   change. A one-run ignore must name the exact advisory or advisories in the
+   commit body when `gitship` creates a commit, request body, and final report;
+   broad or silent vulnerability suppression is not allowed.
+9. If deprecated packages but no vulnerabilities are found, stop and require
+   one explicit user choice:
+   - continue with the deprecation warning recorded in the request body and
+     final report;
+   - update or replace the affected package(s), then rerun restore,
+     repository-required tests, both dependency reports, and the normal
+     `gitship` checks; or
+   - stop without committing or changing remote state.
+   Treat a package that is both deprecated and vulnerable under the stricter
+   vulnerability flow.
+10. If the reports are complete and contain no findings, record a successful
+    .NET dependency precheck. Include its result, any explicitly ignored
+    advisories, and any accepted deprecation warnings in the pull or merge
+    request body and the final `gitship` report.
+
+When `gitship` creates a commit after the user accepts a known vulnerability,
+keep the conventional-commit subject focused on the actual code change. Add a
+commit body containing one entry per accepted advisory with the advisory ID or
+URL, package ID, resolved version, direct or transitive status, and the phrase
+`accepted by user for this gitship run only`. Do not claim that the user
+accepted any broader or permanent suppression. If all commits already exist,
+do not amend or rewrite them solely to add this record; put the same details in
+the pull or merge request body and final report instead.
+
+After the dependency precheck is clean or explicitly resolved:
 
 1. Require a configured `origin` remote and an upstream-ready non-default
    branch.
@@ -139,7 +222,8 @@ after performing all applicable safety checks.
    fast-forward-only pull. Otherwise leave the current branch unchanged and
    explain why.
 10. Report the commit hash, request URL, confirmed merge state, current branch,
-    checks run, Gitleaks result, and working-tree status.
+    checks run, Gitleaks result, .NET dependency precheck result when
+    applicable, and working-tree status.
 
 ## Boundaries
 
