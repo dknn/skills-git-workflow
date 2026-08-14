@@ -17,7 +17,9 @@ provides two actions:
   commit message, and creates a local commit.
 - `gitship` performs the same safety checks, pushes the current branch, creates
   a GitHub pull request or GitLab merge request, and merges it remotely when
-  repository protections allow it.
+  repository protections allow it. For .NET repositories it also audits direct
+  and transitive NuGet dependencies for known vulnerabilities and deprecation
+  before committing or pushing.
 
 The workflow is designed for Codex but keeps the core instructions
 agent-neutral so they can be adapted for other coding agents.
@@ -36,6 +38,23 @@ Both actions:
 - stop when required tools are unavailable or a scan fails;
 - never add Gitleaks exceptions automatically; and
 - never bypass branch protection, required reviews, or CI checks.
+
+Before shipping a .NET repository, `gitship` explicitly enables NuGet audit in
+`all` mode, so direct and transitive dependencies are covered regardless of the
+target framework's default. Vulnerability and deprecation reports are generated
+and evaluated separately. An incomplete audit blocks shipping.
+
+Known vulnerabilities require an explicit choice to update the affected
+packages, ignore named advisories for the current run only, or stop. Deprecated
+packages without known vulnerabilities require an explicit choice to continue
+with a recorded warning, update them, or stop. The workflow never updates
+packages or writes permanent audit suppressions automatically. After an update,
+it reruns restore, repository-required tests, and both dependency reports.
+When `gitship` creates a commit after an advisory is accepted, the commit body
+records the advisory, affected package and version, dependency type, and
+one-run scope while leaving the conventional-commit subject focused on the
+actual change. Existing commits are not rewritten solely to add this record;
+the pull or merge request records it instead.
 
 `gitship` detects GitHub or GitLab from the `origin` remote. Other providers
 are rejected unless their workflow is added explicitly.
