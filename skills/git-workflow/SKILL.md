@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Safely stage and commit Git changes or ship a branch through a GitHub pull request or GitLab merge request. Use when the user says gitc, asks for a local AI-generated commit, says gitship, or asks to push a branch and merge it remotely. Require a root .gitignore, repository-instruction compliance, staged-content Gitleaks scanning, focused diffs, .NET dependency auditing before shipping, and protected-branch safeguards.
+description: Safely stage and commit Git changes or ship a branch through a GitHub pull request or GitLab merge request. Use when the user says gitc, asks for a local AI-generated commit, says gitship, or asks to push a branch and merge it remotely. Require a root .gitignore, repository-instruction compliance, staged and committed-branch Gitleaks scanning, focused diffs, .NET dependency auditing before shipping, and protected-branch safeguards.
 ---
 
 # Git workflow
@@ -110,11 +110,39 @@ After the common checks and successful staged-content scan:
 
 ## `gitship`
 
-When approved changes are not already committed, perform the common checks and
-stage-and-scan steps, then run the .NET dependency precheck below before
-creating the `gitc` commit. Complete the commit only after the dependency
-findings are resolved. If the working tree has no approved changes, run all
-applicable safety checks before shipping the existing current-branch commits.
+Run the common checks for every `gitship` invocation. When approved changes are
+not already committed, perform the stage-and-scan steps before creating the
+`gitc` commit. After the final approved commit exists, run the pre-push
+committed-content scan below. Run the .NET dependency precheck for every
+`gitship` invocation after the current approved dependency state is established
+and before the first commit, push, pull-request, or merge-request mutation.
+Rerun it after any approved dependency update, and carry a result forward only
+while dependency inputs remain unchanged. The committed-content scan and
+dependency precheck are mandatory even when the working tree is clean or the
+branch is already pushed.
+
+### Pre-push committed-content scan
+
+1. Fetch `origin` without modifying the working tree, then resolve the current
+   remote default branch and the exact committed range
+   `origin/<default>..HEAD`. Stop when the range cannot be established, the
+   fetch fails, or the branch contains no commits to ship.
+2. Confirm `gitleaks` is available and supports the required `git` scan mode.
+   Do not install or upgrade it automatically.
+3. Run `gitleaks git` against only the resolved committed range with
+   `--redact=100`, `--no-banner`, and a bounded timeout. Pass the range through
+   `--log-opts` without interpolating untrusted shell text.
+   - Pass the repository's `.gitleaks.toml` with `--config` when present.
+   - Pass the repository's `.gitleaksignore` with
+     `--gitleaks-ignore-path` when present.
+   - Do not create or modify either file.
+4. Stop before any push or request mutation on findings, timeout, execution
+   error, unsupported version, or an incomplete scan. Do not print detected
+   secret values or add allowlists automatically.
+
+The staged-content scan protects a new commit from working-tree mistakes. The
+committed-content scan independently protects every local branch commit that
+would be shipped. Run both when `gitship` creates a commit.
 
 ### .NET dependency precheck
 
@@ -124,9 +152,14 @@ applicable safety checks before shipping the existing current-branch commits.
    authoritative solution or project. Ensure every detected project is covered;
    stop and report an incomplete audit when coverage cannot be established.
 2. If no supported .NET entry point exists, report the precheck as not
-   applicable and continue. Otherwise require the `dotnet` CLI. Do not install
-   an SDK, change `global.json`, or bypass a repository-pinned SDK. Stop when
-   the required SDK is unavailable.
+   applicable and continue. Otherwise require the `dotnet` CLI and run
+   `dotnet --version` from the repository so any `global.json` selection is
+   honored. Require .NET SDK 8 or newer because earlier SDKs do not provide the
+   required NuGet audit capability. Confirm the selected SDK's package-list
+   help supports `--include-transitive`, `--vulnerable`, `--deprecated`,
+   `--format json`, and `--output-version 1`. Treat an unparseable SDK version
+   or any missing capability as an incomplete audit and stop. Do not install an
+   SDK, change `global.json`, or bypass a repository-pinned SDK.
 3. Record the working-tree status before commands that may restore packages.
    Never stage restore-generated changes automatically. After the precheck,
    identify any new or modified files and require them to be reviewed as normal
@@ -143,8 +176,9 @@ applicable safety checks before shipping the existing current-branch commits.
    form:
    - .NET 10 or newer: `dotnet package list --project <entry-point>`.
    - .NET 9 or older: `dotnet list <entry-point> package`.
-   Add `--include-transitive --vulnerable --format json` for the vulnerability
-   report and `--include-transitive --deprecated --format json` for the
+   Add `--include-transitive --vulnerable --format json --output-version 1`
+   for the vulnerability report and
+   `--include-transitive --deprecated --format json --output-version 1` for the
    deprecation report. Run the reports separately because `--vulnerable` and
    `--deprecated` cannot be combined. Use temporary output outside the
    repository and remove only the verified temporary files afterward.
@@ -195,7 +229,8 @@ accepted any broader or permanent suppression. If all commits already exist,
 do not amend or rewrite them solely to add this record; put the same details in
 the pull or merge request body and final report instead.
 
-After the dependency precheck is clean or explicitly resolved:
+After the committed-content scan and dependency precheck are clean or
+explicitly resolved:
 
 1. Require a configured `origin` remote and an upstream-ready non-default
    branch.
@@ -205,7 +240,8 @@ After the dependency precheck is clean or explicitly resolved:
    - Otherwise stop and report that the provider is unsupported.
 3. If the provider CLI is missing, stop and link to its official installation
    page. Do not install it.
-4. Fetch the remote and check for divergence or conflicts. Do not force-push,
+4. Reuse the fetch from the committed-content scan when it is still current;
+   otherwise fetch again. Check for divergence or conflicts. Do not force-push,
    rewrite commits, or silently rebase.
 5. Push the current branch normally, setting its upstream when needed.
 6. Reuse an existing open pull or merge request for the same source and target

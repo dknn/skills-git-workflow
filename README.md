@@ -10,6 +10,7 @@ provides two actions:
   - [Installing Gitleaks on Windows](#installing-gitleaks-on-windows)
 - [Install the skill](#install-the-skill)
 - [Usage](#usage)
+- [Validation](#validation)
 - [Other agents](#other-agents)
 - [License](#license)
 
@@ -34,15 +35,19 @@ Both actions:
   continue on default, stop, or create/switch to a feature branch and resume;
 - review the working tree and exclude unrelated changes;
 - scan the exact staged contents with Gitleaks before committing;
+- scan the committed branch range with Gitleaks before every push;
 - redact detected secrets from command output;
 - stop when required tools are unavailable or a scan fails;
 - never add Gitleaks exceptions automatically; and
 - never bypass branch protection, required reviews, or CI checks.
 
-Before shipping a .NET repository, `gitship` explicitly enables NuGet audit in
-`all` mode, so direct and transitive dependencies are covered regardless of the
+Before shipping a .NET repository, `gitship` always runs the dependency
+precheck, including when the working tree is clean or the branch is already
+pushed. It requires .NET SDK 8 or newer, explicitly enables NuGet audit in
+`all` mode, and covers direct and transitive dependencies regardless of the
 target framework's default. Vulnerability and deprecation reports are generated
-and evaluated separately. An incomplete audit blocks shipping.
+and evaluated separately with JSON output version 1. An unsupported SDK or
+incomplete audit blocks shipping.
 
 Known vulnerabilities require an explicit choice to update the affected
 packages, ignore named advisories for the current run only, or stop. Deprecated
@@ -95,6 +100,16 @@ It reads the skill name from `skills/git-workflow/SKILL.md`, resolves the
 current user's home directory, and copies the complete skill to
 `$HOME/.agents/skills/git-workflow`.
 
+To synchronize an existing installation to the downloaded version and remove
+files that no longer belong to the skill, run:
+
+```powershell
+pwsh -NoProfile -File .\Copy-AgentsToUserProfile.ps1 -RemoveExtraFiles
+```
+
+Without `-RemoveExtraFiles`, the wrapper overwrites current source files but
+preserves any additional files already present in the installed skill folder.
+
 The wrapper uses the bundled `tools/Copy-AgentSkillToUserProfile.ps1` utility.
 Its reusable source is maintained in the `skills-utils` repository, but this
 repository includes the version it needs and has no runtime dependency on
@@ -122,6 +137,18 @@ three explicit options:
 1. continue on the default branch (explicit confirmation required),
 2. stop, or
 3. create and switch to a non-default branch, then resume checks and continue.
+
+## Validation
+
+Run the dependency-free workflow contract test from the repository root:
+
+```powershell
+pwsh -NoProfile -File .\tests\Test-GitWorkflowSkill.ps1
+```
+
+The test verifies that committed and staged Gitleaks scanning, the mandatory
+.NET precheck, SDK capability checks, stable JSON output, and synchronized
+installation guidance remain present.
 
 ## Other agents
 
