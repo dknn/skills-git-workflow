@@ -160,3 +160,30 @@ models, and invocation syntax may differ between products.
 ## License
 
 MIT
+
+## Versions and releases
+
+This repository is versioned independently with stable SemVer tags
+`vMAJOR.MINOR.PATCH`. All skills in the repository share that release. Skill
+Markdown and PowerShell are distributed as validated source, without compilation.
+
+Use a patch release for compatible corrections, a minor release for compatible
+features, and a major release for breaking instructions, interfaces, or packaging.
+The initial release is `v1.0.0`; do not edit a published tag to fix a release.
+
+Merge a pull request after both `Validate (windows-latest)` and
+`Validate (ubuntu-latest)` pass. Then run **Actions > Release > Run workflow**
+on `main` with the new version. The workflow validates that exact commit again,
+requires immutable releases, creates a new tag, prepares a draft, and publishes
+it. A failed publication can leave a tag or draft for manual inspection; the
+workflow never overwrites an existing tag. Publish a new version for corrections.
+
+Repository rules require PRs, passing checks, an up-to-date branch, and resolved
+review conversations on main. Force pushes and deletion are blocked. There are
+no bypass actors and no required external approvals, permitting solo maintenance.
+Version tags cannot be updated or deleted; releases are immutable after publication.
+
+Use `$update-dknn-skills` from [skills-utils](https://github.com/dknn/skills-utils)
+to install or update. New installations use Stable; Latest explicitly follows
+the default branch. Installed source choices and pinned versions persist.
+Commit SHAs and managed-file hashes identify installed content, not timestamps.
