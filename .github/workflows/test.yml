@@ -18,10 +18,41 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
+      - name: Set up Gitleaks
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ToolDirectory = Join-Path $env:RUNNER_TEMP 'gitleaks'
+          New-Item -ItemType Directory -Path $ToolDirectory -Force | Out-Null
+          if ($IsWindows) {
+            $Asset = 'gitleaks_8.30.1_windows_x64.zip'
+            $ExpectedHash = 'd29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e'
+          } else {
+            $Asset = 'gitleaks_8.30.1_linux_x64.tar.gz'
+            $ExpectedHash = '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+          }
+          $Archive = Join-Path $env:RUNNER_TEMP $Asset
+          Invoke-WebRequest "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/$Asset" -OutFile $Archive
+          if ((Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ExpectedHash) {
+            throw 'Gitleaks archive checksum does not match the pinned release.'
+          }
+          if ($IsWindows) {
+            Expand-Archive -LiteralPath $Archive -DestinationPath $ToolDirectory
+          } else {
+            tar -xzf $Archive -C $ToolDirectory gitleaks
+            if ($LASTEXITCODE -ne 0) { throw 'Gitleaks extraction failed.' }
+          }
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $ToolDirectory -Encoding utf8
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Run validation
         shell: pwsh
-        run: pwsh -NoProfile -File ./tests/Test-GitWorkflowSkill.ps1
+        run: |
+          pwsh -NoProfile -File ./tests/Test-GitWorkflowSkill.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File ./tests/Test-GitRepositorySettingsSkill.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File ./tests/Test-LocalGitHooks.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -1,7 +1,15 @@
-# Agent Git Workflow
+# Git Workflow and Repository Settings
 
-A portable agent skill for safe Git commits and remote merge workflows. It
-provides two actions:
+Two portable agent skills, installed together from this repository:
+
+- `git-workflow`: safe local commits (`gitc`) and remote merge workflows (`gitship`).
+- `git-repository-settings`: read-only governance audits (`audit`), secure
+  repository setup (`init`), and explicitly requested local Git hooks.
+
+The former `dknn/skills-git-repository-settings` repository is superseded by this
+repository. Existing skill names and commands are preserved; the copy installer
+now installs both skills. Installing the skills does not activate hooks or change
+GitHub/GitLab settings.
 
 ## Table of contents
 
@@ -10,6 +18,7 @@ provides two actions:
 - [Requirements](#requirements)
   - [Installing Gitleaks on Windows](#installing-gitleaks-on-windows)
 - [Install the skill](#install-the-skill)
+- [Repository settings and optional local hooks](#repository-settings-and-optional-local-hooks)
 - [Usage](#usage)
 - [Validation](#validation)
 - [Other agents](#other-agents)
@@ -39,7 +48,7 @@ agent-neutral so they can be adapted for other coding agents.
 - Til shipping af .NET-projekter: .NET SDK 8 eller nyere, kompatibelt med
   projektet.
 
-### Installér skillen
+### Installér begge skills
 
 Åbn PowerShell i en mappe til kode:
 
@@ -55,8 +64,8 @@ pwsh -NoProfile -File .\Copy-AgentsToUserProfile.ps1 -TargetRoot "$env:USERPROFI
 ```
 
 Kør installationskommandoen for den agent, du bruger, eller begge.
-Skillen installeres under brugerprofilen i `.agents/skills/git-workflow`
-til Codex og `.claude/skills/git-workflow` til Claude Code.
+Begge skills installeres under brugerprofilen i `.agents/skills` til Codex
+og `.claude/skills` til Claude Code, hver i sin egen mappe.
 Start derefter en ny session.
 
 Kontrollér værktøjerne, og log ind på den relevante platform:
@@ -79,9 +88,13 @@ glab auth login
 | --- | --- | --- |
 | Lokalt commit uden push | `$git-workflow gitc` | `/git-workflow gitc` |
 | Commit efter behov, push og PR/MR med merge | `$git-workflow gitship` | `/git-workflow gitship` |
+| Kontrollér repository-beskyttelse uden ændringer | `$git-repository-settings audit` | `/git-repository-settings audit` |
+| Planlæg og opsæt repository-beskyttelse | `$git-repository-settings init` | `/git-repository-settings init` |
 
 Workflowet scanner for secrets og respekterer repositoryets beskyttelse
 og kontrolkrav. Projektet skal have en `.gitignore` i repositoryets rod.
+`init` ændrer kun serverindstillinger efter godkendelse og med de nødvendige
+rettigheder. Lokale hooks aktiveres separat; se afsnittet nedenfor.
 
 ### Fælles regel: Arbejd aldrig direkte på main/master
 
@@ -156,6 +169,7 @@ are rejected unless their workflow is added explicitly.
 ## Requirements
 
 - Git
+- PowerShell 7 for the bundled copy installer and optional local hooks
 - [Gitleaks](https://github.com/gitleaks/gitleaks)
 - [GitHub CLI](https://cli.github.com/) for GitHub remotes
 - [GitLab CLI](https://gitlab.com/gitlab-org/cli) for GitLab remotes
@@ -185,9 +199,10 @@ Run the self-contained wrapper from the `skills-git-workflow` repository root:
 pwsh -NoProfile -File .\Copy-AgentsToUserProfile.ps1
 ```
 
-It reads the skill name from `skills/git-workflow/SKILL.md`, resolves the
-current user's home directory, and copies the complete skill to
-`$HOME/.agents/skills/git-workflow`.
+It reads each skill name from its `SKILL.md`, resolves the current user's home
+directory, and copies both complete skills to `$HOME/.agents/skills/git-workflow`
+and `$HOME/.agents/skills/git-repository-settings`. For Claude Code, use
+`-TargetRoot "$env:USERPROFILE\.claude"` to install both under `.claude/skills`.
 
 To synchronize an existing installation to the downloaded version and remove
 files that no longer belong to the skill, run:
@@ -203,6 +218,43 @@ The wrapper uses the bundled `tools/Copy-AgentSkillToUserProfile.ps1` utility.
 Its reusable source is maintained in the `skills-utils` repository, but this
 repository includes the version it needs and has no runtime dependency on
 `skills-utils`.
+
+## Repository settings and optional local hooks
+
+Use `git-repository-settings audit` to inspect default-branch protection,
+direct/force-push restrictions, required PR/MR checks, blocking secrets scanning,
+and runner availability. The audit is read-only. `init` prepares a plan and applies
+approved settings only with the required GitHub/GitLab permissions. Missing
+permissions or unavailable runners are reported as blockers.
+
+The settings skill includes provider references, a small policy-profile example,
+and local hook assets. Git does not copy active `.git/hooks` or local Git
+configuration when cloning. To activate the bundled hooks **in this repository**,
+with Git, Gitleaks, and PowerShell 7 available, run from its root:
+
+```powershell
+pwsh -NoProfile -File ./skills/git-repository-settings/scripts/Install-LocalGitHooks.ps1
+pwsh -NoProfile -File ./skills/git-repository-settings/scripts/Install-LocalGitHooks.ps1 -Check
+```
+
+`-Check` verifies installation without changing it. The hooks block commits and
+pushes to this repository's `main`, remote ref deletion, and history rewriting.
+Gitleaks scans staged content before commit and outgoing history before push.
+Both skill contract tests run before push. These hooks do not prevent editing
+files; the `AGENTS.md`/`CLAUDE.md` branch rule above covers agent edits.
+
+The installer preserves matching hooks and refuses conflicting hooks, custom
+`core.hooksPath`, conflicting scanner paths, linked Git directories, or shared
+hooks outside the checkout. It records the scanner path in repository-local Git
+configuration; machine-specific paths are not committed.
+
+Installed copies retain the script and assets. Pass `-RepositoryRoot <checkout>`
+to target a checkout after reading its instructions. The hooks require the two
+contract tests from this repository and protect `main`; review and adapt them
+before use elsewhere, including repositories that use `master` or another default
+branch. Local hooks are bypassable assistance and do not replace server-side
+branch protection or required CI checks. Installing either skill does not install
+global `AGENTS.md`/`CLAUDE.md` rules or activate hooks automatically.
 
 ## Usage
 
@@ -229,15 +281,23 @@ three explicit options:
 
 ## Validation
 
-Run the dependency-free workflow contract test from the repository root:
+Run all three checks from the repository root. The hook test requires Git,
+Gitleaks, and PowerShell 7:
 
 ```powershell
 pwsh -NoProfile -File .\tests\Test-GitWorkflowSkill.ps1
+pwsh -NoProfile -File .\tests\Test-GitRepositorySettingsSkill.ps1
+pwsh -NoProfile -File .\tests\Test-LocalGitHooks.ps1
 ```
 
-The test verifies that committed and staged Gitleaks scanning, the mandatory
+The workflow contract test verifies that committed and staged Gitleaks scanning, the mandatory
 .NET precheck, SDK capability checks, stable JSON output, and synchronized
 installation guidance remain present.
+The settings contract test checks the provider guidance and bundled resources.
+The hook test uses isolated local repositories and fresh clones to verify hook
+installation, blocking behavior, both installation targets, and synchronization.
+It does not contact GitHub or push anything. CI runs all three on Windows and
+Ubuntu with a pinned, checksum-verified Gitleaks release.
 
 ## Other agents
 
