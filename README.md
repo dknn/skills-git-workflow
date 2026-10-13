@@ -5,6 +5,7 @@ provides two actions:
 
 ## Table of contents
 
+- [Installation til Codex og Claude Code (Windows)](#installation-til-codex-og-claude-code-windows)
 - [Safety guarantees](#safety-guarantees)
 - [Requirements](#requirements)
   - [Installing Gitleaks on Windows](#installing-gitleaks-on-windows)
@@ -24,6 +25,94 @@ provides two actions:
 
 The workflow is designed for Codex but keeps the core instructions
 agent-neutral so they can be adapted for other coding agents.
+
+## Installation til Codex og Claude Code (Windows)
+
+### Nødvendige værktøjer
+
+- [Git](https://git-scm.com/downloads)
+- [PowerShell 7](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows)
+- [Gitleaks](https://github.com/gitleaks/gitleaks/releases): pak `gitleaks.exe`
+  ud, og tilføj mappen til `PATH`.
+- [GitHub CLI](https://cli.github.com/) til GitHub eller
+  [GitLab CLI](https://gitlab.com/gitlab-org/cli) til GitLab.
+- Til shipping af .NET-projekter: .NET SDK 8 eller nyere, kompatibelt med
+  projektet.
+
+### Installér skillen
+
+Åbn PowerShell i en mappe til kode:
+
+```powershell
+git clone https://github.com/dknn/skills-git-workflow.git
+cd skills-git-workflow
+
+# Codex
+pwsh -NoProfile -File .\Copy-AgentsToUserProfile.ps1
+
+# Claude Code
+pwsh -NoProfile -File .\Copy-AgentsToUserProfile.ps1 -TargetRoot "$env:USERPROFILE\.claude"
+```
+
+Kør installationskommandoen for den agent, du bruger, eller begge.
+Skillen installeres under brugerprofilen i `.agents/skills/git-workflow`
+til Codex og `.claude/skills/git-workflow` til Claude Code.
+Start derefter en ny session.
+
+Kontrollér værktøjerne, og log ind på den relevante platform:
+
+```powershell
+git --version
+pwsh --version
+gitleaks version
+
+# GitHub
+gh auth login
+
+# Eller GitLab
+glab auth login
+```
+
+### Brug workflowet i agentens chat
+
+| Handling | Codex | Claude Code |
+| --- | --- | --- |
+| Lokalt commit uden push | `$git-workflow gitc` | `/git-workflow gitc` |
+| Commit efter behov, push og PR/MR med merge | `$git-workflow gitship` | `/git-workflow gitship` |
+
+Workflowet scanner for secrets og respekterer repositoryets beskyttelse
+og kontrolkrav. Projektet skal have en `.gitignore` i repositoryets rod.
+
+### Fælles regel: Arbejd aldrig direkte på main/master
+
+Tilføj dette til projektets `AGENTS.md`:
+
+```markdown
+## Git branches
+
+Kontrollér den aktuelle Git-branch, før filer ændres.
+
+Der må ikke udvikles eller committes direkte på main, master
+eller repositoryets default branch. Vælg eller opret en separat
+arbejdsbranch, før arbejdet fortsætter.
+
+Ændringer skal merges via en pull request eller merge request.
+Branch protection, krævede reviews og CI-kontroller må ikke omgås.
+```
+
+Opret også en `CLAUDE.md` ved siden af `AGENTS.md`, eller tilføj følgende
+til den eksisterende fil:
+
+```markdown
+@AGENTS.md
+```
+
+Så indlæser Claude Code de fælles regler, også når det ikke læser
+`AGENTS.md` direkte. Se [Claude Codes dokumentation om fælles instruktioner](https://code.claude.com/docs/en/memory#share-one-file-with-other-coding-tools).
+
+Denne branchregel er en ekstra projektinstruktion, der gælder før redigering.
+Skillen kontrollerer selv default branch ved `gitc` og `gitship` og følger
+projektets strengere regler.
 
 ## Safety guarantees
 
