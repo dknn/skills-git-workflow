@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+branch=$(git symbolic-ref --quiet --short HEAD) || {
+    echo >&2 'Local guard: commits require a named work branch.'
+    exit 1
+}
+if [ "$branch" = main ]; then
+    echo >&2 'Local guard: commits on main are blocked. Use a work branch.'
+    exit 1
+fi
+scanner=$(git config --local --get localguard.gitleaksPath || printf '%s' gitleaks)
+if ! command -v "$scanner" >/dev/null 2>&1; then
+    echo >&2 'Local guard: gitleaks is required; commit blocked.'
+    exit 1
+fi
+exec "$scanner" git . --pre-commit --staged --redact=100 --no-banner --timeout=120

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Repository Settings"
+  short_description: "Audit and initialize GitHub or GitLab repository security settings"
+  default_prompt: "Use $git-repository-settings to audit or initialize protected branches, required pipelines, and Gitleaks checks safely."
