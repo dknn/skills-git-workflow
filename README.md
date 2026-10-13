@@ -219,6 +219,13 @@ Its reusable source is maintained in the `skills-utils` repository, but this
 repository includes the version it needs and has no runtime dependency on
 `skills-utils`.
 
+The bundled copy utility is synchronized from
+[`skills-utils` commit `7d90915`](https://github.com/dknn/skills-utils/commit/7d90915385f3fb16f4fb7c94b6fae99fa0623ef2).
+It rejects symbolic links, junctions, and overlapping source/destination skill
+directories before writing, and reads plain or quoted skill names from YAML
+frontmatter. The utility supports `-WhatIf` when called directly; the root
+wrapper retains its existing parameters.
+
 ## Repository settings and optional local hooks
 
 Use `git-repository-settings audit` to inspect default-branch protection,
@@ -281,22 +288,26 @@ three explicit options:
 
 ## Validation
 
-Run all three checks from the repository root. The hook test requires Git,
+Run all four checks from the repository root. The hook test requires Git,
 Gitleaks, and PowerShell 7:
 
 ```powershell
+pwsh -NoProfile -File .\tests\Test-Copy-AgentSkillToUserProfile.ps1
 pwsh -NoProfile -File .\tests\Test-GitWorkflowSkill.ps1
 pwsh -NoProfile -File .\tests\Test-GitRepositorySettingsSkill.ps1
 pwsh -NoProfile -File .\tests\Test-LocalGitHooks.ps1
 ```
 
+The copy regression test is bundled from `skills-utils`, with its target path
+adapted to `tools/`. It checks copying, cleanup isolation, `-WhatIf`, frontmatter
+validation, overlapping paths, and source/destination links.
 The workflow contract test verifies that committed and staged Gitleaks scanning, the mandatory
 .NET precheck, SDK capability checks, stable JSON output, and synchronized
 installation guidance remain present.
 The settings contract test checks the provider guidance and bundled resources.
 The hook test uses isolated local repositories and fresh clones to verify hook
 installation, blocking behavior, both installation targets, and synchronization.
-It does not contact GitHub or push anything. CI runs all three on Windows and
+It does not contact GitHub or push anything. CI runs all four on Windows and
 Ubuntu with a pinned, checksum-verified Gitleaks release.
 
 ## Other agents
