@@ -16,7 +16,7 @@ GitHub/GitLab settings.
 - [Installation til Codex og Claude Code (Windows)](#installation-til-codex-og-claude-code-windows)
 - [Safety guarantees](#safety-guarantees)
 - [Requirements](#requirements)
-  - [Installing Gitleaks on Windows](#installing-gitleaks-on-windows)
+  - [Using Betterleaks on Windows](#using-betterleaks-on-windows)
 - [Install the skill](#install-the-skill)
 - [Repository settings and optional local hooks](#repository-settings-and-optional-local-hooks)
 - [Usage](#usage)
@@ -24,7 +24,7 @@ GitHub/GitLab settings.
 - [Other agents](#other-agents)
 - [License](#license)
 
-- `gitc` stages approved changes, scans them with Gitleaks, generates a concise
+- `gitc` stages approved changes, scans them with Betterleaks, generates a concise
   commit message, and creates a local commit.
 - `gitship` performs the same safety checks, pushes the current branch, creates
   a GitHub pull request or GitLab merge request, and merges it remotely when
@@ -41,8 +41,10 @@ agent-neutral so they can be adapted for other coding agents.
 
 - [Git](https://git-scm.com/downloads)
 - [PowerShell 7](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows)
-- [Gitleaks](https://github.com/gitleaks/gitleaks/releases): pak `gitleaks.exe`
-  ud, og tilføj mappen til `PATH`.
+- [Betterleaks](https://github.com/betterleaks/betterleaks/releases) til `gitc`
+  og `gitship`: brug en verificeret binær eller et verificeret image i WSL/Podman.
+- Kun til de separate, valgfrie lokale hooks: [Gitleaks](https://github.com/gitleaks/gitleaks/releases)
+  på `PATH`. Disse hooks er endnu ikke migreret til Betterleaks.
 - [GitHub CLI](https://cli.github.com/) til GitHub eller
   [GitLab CLI](https://gitlab.com/gitlab-org/cli) til GitLab.
 - Til shipping af .NET-projekter: .NET SDK 8 eller nyere, kompatibelt med
@@ -73,7 +75,7 @@ Kontrollér værktøjerne, og log ind på den relevante platform:
 ```powershell
 git --version
 pwsh --version
-gitleaks version
+betterleaks version
 
 # GitHub
 gh auth login
@@ -136,11 +138,13 @@ Both actions:
 - pause on the remote default branch and require an explicit choice to
   continue on default, stop, or create/switch to a feature branch and resume;
 - review the working tree and exclude unrelated changes;
-- scan the exact staged contents with Gitleaks before committing;
-- scan the committed branch range with Gitleaks before every push;
+- scan the exact staged contents with Betterleaks before committing;
+- scan the committed branch range with Betterleaks before every push;
 - redact detected secrets from command output;
 - stop when required tools are unavailable or a scan fails;
-- never add Gitleaks exceptions automatically; and
+- never add Betterleaks exceptions automatically;
+- never include `Co-authored-by` trailers in new commits, stripping them from
+  new commit messages without rewriting existing commits; and
 - never bypass branch protection, required reviews, or CI checks.
 
 Before shipping a .NET repository, `gitship` always runs the dependency
@@ -170,26 +174,35 @@ are rejected unless their workflow is added explicitly.
 
 - Git
 - PowerShell 7 for the bundled copy installer and optional local hooks
-- [Gitleaks](https://github.com/gitleaks/gitleaks)
+- [Betterleaks](https://github.com/betterleaks/betterleaks) for `gitc` and `gitship`
+- Gitleaks only for the existing optional local hooks and their regression tests
 - [GitHub CLI](https://cli.github.com/) for GitHub remotes
 - [GitLab CLI](https://gitlab.com/gitlab-org/cli) for GitLab remotes
 
-### Installing Gitleaks on Windows
+### Using Betterleaks on Windows
 
-1. Download the appropriate Windows archive from the
-   [official Gitleaks releases](https://github.com/gitleaks/gitleaks/releases).
-2. Extract `gitleaks.exe` to a stable directory such as
-   `C:\Tools\gitleaks`.
-3. Add that directory to your user or system `PATH`.
-4. Restart the terminal and the coding agent.
-5. Verify the installation:
+For native directory scanning, download the appropriate Windows archive from
+[official Betterleaks releases](https://github.com/betterleaks/betterleaks/releases),
+verify its checksum, and use the resolved `betterleaks.exe` path or add its
+folder to `PATH`. Verify the selected binary with `betterleaks version`.
 
-   ```powershell
-   gitleaks version
-   ```
+For Git-history scanning on Windows, prefer a verified Linux binary or OCI
+image in an existing WSL setup. A successful native `dir` scan does not prove
+that native Git subprocesses work. Check the selected execution route rather
+than assuming that a missing Windows PATH entry means the scanner is absent.
 
-The skill does not install Gitleaks automatically and does not continue when
-Gitleaks is missing.
+With an image, verify its identity, disable network access, mount scan input
+read-only, preserve the scanner exit code and use task-owned temporary writable
+paths as needed. The `git` scan must be able to read the exact committed range
+and its Git metadata. A directory scan cannot replace a history scan.
+
+The skill does not automatically install tools, change persistent WSL/Podman
+configuration, or substitute another scanner. Missing execution routes, findings
+and incomplete scans block the workflow.
+
+Existing scanner configuration and ignore files are preserved. Betterleaks can
+consume legacy files through its compatibility options; they are not silently
+ignored or migrated. See the [workflow skill](skills/git-workflow/SKILL.md).
 
 ## Install the skill
 
@@ -218,6 +231,13 @@ The wrapper uses the bundled `tools/Copy-AgentSkillToUserProfile.ps1` utility.
 Its reusable source is maintained in the `skills-utils` repository, but this
 repository includes the version it needs and has no runtime dependency on
 `skills-utils`.
+
+The bundled copy utility is synchronized from
+[`skills-utils` commit `7d90915`](https://github.com/dknn/skills-utils/commit/7d90915385f3fb16f4fb7c94b6fae99fa0623ef2).
+It rejects symbolic links, junctions, and overlapping source/destination skill
+directories before writing, and reads plain or quoted skill names from YAML
+frontmatter. The utility supports `-WhatIf` when called directly; the root
+wrapper retains its existing parameters.
 
 ## Repository settings and optional local hooks
 
@@ -281,23 +301,30 @@ three explicit options:
 
 ## Validation
 
-Run all three checks from the repository root. The hook test requires Git,
+Run all four checks from the repository root. The hook test requires Git,
 Gitleaks, and PowerShell 7:
 
 ```powershell
+pwsh -NoProfile -File .\tests\Test-Copy-AgentSkillToUserProfile.ps1
 pwsh -NoProfile -File .\tests\Test-GitWorkflowSkill.ps1
 pwsh -NoProfile -File .\tests\Test-GitRepositorySettingsSkill.ps1
 pwsh -NoProfile -File .\tests\Test-LocalGitHooks.ps1
 ```
 
-The workflow contract test verifies that committed and staged Gitleaks scanning, the mandatory
+The copy regression test is bundled from `skills-utils`, with its target path
+adapted to `tools/`. It checks copying, cleanup isolation, `-WhatIf`, frontmatter
+validation, overlapping paths, and source/destination links.
+The workflow contract test verifies that committed and staged Betterleaks scanning, the mandatory
 .NET precheck, SDK capability checks, stable JSON output, and synchronized
 installation guidance remain present.
 The settings contract test checks the provider guidance and bundled resources.
 The hook test uses isolated local repositories and fresh clones to verify hook
 installation, blocking behavior, both installation targets, and synchronization.
-It does not contact GitHub or push anything. CI runs all three on Windows and
-Ubuntu with a pinned, checksum-verified Gitleaks release.
+It does not contact GitHub or push anything. CI runs all four on Windows and
+Ubuntu with a pinned, checksum-verified Gitleaks release for the existing hook
+tests. The workflow contract test checks the Betterleaks instructions; it does
+not execute the scanner. Migrating the separate settings skill, hooks and their
+CI dependency is a separate change.
 
 ## Other agents
 

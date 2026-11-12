@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Safely stage and commit Git changes or ship a branch through a GitHub pull request or GitLab merge request. Use when the user says gitc, asks for a local AI-generated commit, says gitship, or asks to push a branch and merge it remotely. Require a root .gitignore, repository-instruction compliance, staged and committed-branch Gitleaks scanning, focused diffs, .NET dependency auditing before shipping, and protected-branch safeguards.
+description: Safely stage and commit Git changes or ship a branch through a GitHub pull request or GitLab merge request. Use when the user says gitc, asks for a local AI-generated commit, says gitship, or asks to push a branch and merge it remotely. Require a root .gitignore, repository-instruction compliance, staged and committed-branch Betterleaks scanning, focused diffs, .NET dependency auditing before shipping, and protected-branch safeguards.
 ---
 
 # Git workflow
@@ -61,32 +61,63 @@ When the user selects Option 3:
 If Git reports dubious ownership, stop and explain the exact Git-recommended
 remediation. Do not add a global `safe.directory` exception automatically.
 
+## Betterleaks execution
+
+Use Betterleaks for both staged-content and committed-content scanning. Do
+not automatically substitute another scanner. Use an available verified native
+executable or a verified OCI image selected by the repository or user. Check
+`betterleaks version` through the chosen execution route and confirm support
+for the required `dir` and `git` commands.
+
+On Windows, prefer a verified Linux binary or OCI image in an existing WSL
+setup for Git-history scans. A working native Windows `dir` scan does not prove
+that native Git subprocesses work. If they fail, use an available verified WSL
+route without changing global Git configuration; stop if none is available.
+Check WSL before declaring Betterleaks unavailable on PATH. Windows-client
+connectivity does not establish whether Podman can run directly inside WSL.
+Use the resolved executable path for native subprocess calls rather than
+relying on a shell-only PATH resolution.
+
+For image execution, verify the selected image identity, use `--pull=never`,
+disable network access, mount scan input read-only, and give the non-root
+container only the temporary writable paths it needs. Preserve the scanner's
+exit code across WSL and container wrappers. If rootless Podman lacks a writable
+runtime directory, task-owned temporary runtime/storage paths may be used;
+do not modify persistent configuration or install a runtime as a workaround.
+
+If neither execution route is available, stop and identify what is missing.
+Point to the [official Betterleaks releases](https://github.com/betterleaks/betterleaks/releases)
+for a native binary, or the repository's selected image. Do not install,
+upgrade, download a different image, or select a different scanner automatically.
+
+Prefer repository `.betterleaks.toml` and `.betterleaksignore` files when
+present. Existing `.gitleaks.toml` and `.gitleaksignore` files may be passed to
+Betterleaks for compatibility; do not silently ignore or migrate them. Pass
+the selected config with `--config` and the ignore file with the actual
+Betterleaks compatibility flag `--gitleaks-ignore-path`. If competing config
+or ignore files exist, resolve the intended policy before scanning. Make
+these files available read-only inside a container when applicable. Do not
+create, modify, or expand allowlists as part of this workflow.
+
 ## Stage and scan
 
 1. Stage only the approved paths. Use `git add -A -- <paths>` so approved
    additions, modifications, and deletions are represented.
 2. Review `git diff --cached --stat`, `git diff --cached --name-status`, and
    the staged patch. Stop if nothing is staged.
-3. Confirm `gitleaks` is available by running `gitleaks version`.
-4. If it is missing, stop and provide these instructions:
-   - Download the correct archive from
-     `https://github.com/gitleaks/gitleaks/releases`.
-   - On Windows, extract `gitleaks.exe` to a stable directory such as
-     `C:\Tools\gitleaks` and add that directory to `PATH`.
-   - Restart the terminal and agent, then verify with `gitleaks version`.
-   - Mention the official repository:
-     `https://github.com/gitleaks/gitleaks`.
+3. Select and verify Betterleaks using the execution guidance above.
+4. Stop if no verified native or existing WSL/container route is available.
 5. Create a uniquely named temporary directory outside the repository.
 6. Export the complete staged blobs for paths reported by
    `git diff --cached --name-only --diff-filter=ACMR`, preserving safe relative
    paths. Read blobs from the index with `git show :<path>`; never copy working
    tree versions. Reject absolute paths or paths containing a `..` segment.
-7. Run `gitleaks dir` against that staged snapshot with `--redact=100`,
+7. Run `betterleaks dir` against that staged snapshot with `--redact=100`,
    `--no-banner`, and a bounded timeout.
-   - Pass the repository's `.gitleaks.toml` with `--config` when present.
-   - Pass the repository's `.gitleaksignore` with
-     `--gitleaks-ignore-path` when present.
-   - Do not create or modify either file.
+   - Apply the repository's configuration and ignore policy as described above.
+   - Scan the complete exported files, not only changed lines.
+   - Confirm the staged index has not changed since the snapshot was exported;
+     repeat review and scanning if it has.
 8. Remove only the verified temporary directory after scanning. On Windows,
    resolve its absolute path and confirm it is under the system temporary
    directory before recursive removal.
@@ -104,8 +135,12 @@ After the common checks and successful staged-content scan:
    describes only the staged change, such as `fix: preserve rollback state`.
 2. Use a user-provided message only when it accurately describes the staged
    diff. Stop and ask when it is misleading.
-3. Create one local commit. Do not push.
-4. Report the commit hash, message, current branch, checks run, scan result,
+3. Never add `Co-authored-by` trailers or co-author attribution to a new
+   commit. Strip any `Co-authored-by` lines from generated, template, or
+   user-provided commit messages before creating the new commit. Never rewrite
+   existing commits to remove co-author trailers.
+4. Create one local commit. Do not push.
+5. Report the commit hash, message, current branch, checks run, scan result,
    and remaining working-tree status. Identify unrelated unstaged changes.
 
 ## `gitship`
@@ -127,15 +162,18 @@ branch is already pushed.
    remote default branch and the exact committed range
    `origin/<default>..HEAD`. Stop when the range cannot be established, the
    fetch fails, or the branch contains no commits to ship.
-2. Confirm `gitleaks` is available and supports the required `git` scan mode.
+2. Confirm Betterleaks is available through the selected native or image route
+   and supports the required `git` scan mode.
    Do not install or upgrade it automatically.
-3. Run `gitleaks git` against only the resolved committed range with
+3. Run `betterleaks git` against only the resolved committed range with
    `--redact=100`, `--no-banner`, and a bounded timeout. Pass the range through
    `--log-opts` without interpolating untrusted shell text.
-   - Pass the repository's `.gitleaks.toml` with `--config` when present.
-   - Pass the repository's `.gitleaksignore` with
-     `--gitleaks-ignore-path` when present.
-   - Do not create or modify either file.
+   - Apply the repository's configuration and ignore policy as described above.
+   - Image execution must have read-only access to the repository's Git objects
+     and refs. For a linked worktree, make its external Git metadata reachable
+     with correct path mapping, or use an isolated repository containing the
+     exact reviewed commits. Stop if the committed range cannot be read.
+   - A directory scan of the current files cannot replace this history scan.
 4. Stop before any push or request mutation on findings, timeout, execution
    error, unsupported version, or an incomplete scan. Do not print detected
    secret values or add allowlists automatically.
@@ -258,15 +296,18 @@ explicitly resolved:
    fast-forward-only pull. Otherwise leave the current branch unchanged and
    explain why.
 10. Report the commit hash, request URL, confirmed merge state, current branch,
-    checks run, Gitleaks result, .NET dependency precheck result when
+    checks run, Betterleaks result, .NET dependency precheck result when
     applicable, and working-tree status.
 
 ## Boundaries
 
 - Never commit secrets, credentials, private keys, tokens, passwords, or
   sensitive local configuration.
-- Never use `--no-verify`, `SKIP=gitleaks`, `--force`, administrator bypasses,
-  or equivalent escape hatches.
+- Never include `Co-authored-by` trailers or co-author attribution in new
+  commits; strip them from new commit messages before committing without
+  rewriting existing commits.
+- Never use `--no-verify`, hook-skipping environment variables, `--force`,
+  administrator bypasses, or equivalent escape hatches.
 - Never commit, push, merge, or alter remote state beyond the selected action.
-- Treat Gitleaks as a detection gate, not proof that content is safe. Continue
+- Treat Betterleaks as a detection gate, not proof that content is safe. Continue
   to inspect suspicious filenames and staged content.

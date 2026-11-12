@@ -35,12 +35,12 @@ Assert-ContentMatch `
 
 $SkillContracts = @(
     @{
-        Pattern = 'gitleaks dir'
-        Description = 'staged-content Gitleaks scanning'
+        Pattern = 'betterleaks dir'
+        Description = 'staged-content Betterleaks scanning'
     }
     @{
-        Pattern = 'gitleaks git'
-        Description = 'committed-content Gitleaks scanning'
+        Pattern = 'betterleaks git'
+        Description = 'committed-content Betterleaks scanning'
     }
     @{
         Pattern = 'origin/<default>\.\.HEAD'
@@ -69,6 +69,10 @@ $SkillContracts = @(
     @{
         Pattern = '--output-version 1'
         Description = 'stable machine-readable NuGet report output'
+    }
+    @{
+        Pattern = '(?s)Strip any `Co-authored-by` lines from generated, template, or\s+user-provided commit messages before creating the new commit\.\s+Never rewrite\s+existing commits'
+        Description = 'stripping Co-authored-by trailers from new commits without rewriting existing commits'
     }
 )
 

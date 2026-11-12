@@ -50,6 +50,8 @@ jobs:
       - name: Run validation
         shell: pwsh
         run: |
+          pwsh -NoProfile -File ./tests/Test-Copy-AgentSkillToUserProfile.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pwsh -NoProfile -File ./tests/Test-GitWorkflowSkill.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pwsh -NoProfile -File ./tests/Test-GitRepositorySettingsSkill.ps1
