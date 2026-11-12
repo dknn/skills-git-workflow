@@ -32,7 +32,7 @@ try {
 
     Set-Content -LiteralPath (Join-Path $SourceRoot "SKILL.md") -Value @"
 ---
-name: $SkillName
+name: "$SkillName"
 description: Test fixture.
 ---
 
